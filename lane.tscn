@@ -6,7 +6,6 @@
 [ext_resource type="Texture2D" path="res://platform.svg" id="4_platform"]
 [ext_resource type="Shader" path="res://hud_stress.gdshader" id="5_stress"]
 [ext_resource type="Shader" path="res://felt.gdshader" id="6_felt"]
-[ext_resource type="Script" path="res://platform_body.gd" id="7_platform_body"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_wall"]
 size = Vector2(28, 400)
@@ -25,8 +24,6 @@ stress = 0.0
 script = ExtResource("1_lane")
 
 [node name="Felt" type="ColorRect" parent="."]
-offset_left = 0.0
-offset_top = 0.0
 offset_right = 960.0
 offset_bottom = 540.0
 material = SubResource("ShaderMaterial_felt")
@@ -104,14 +101,8 @@ position = Vector2(0, -180)
 [node name="Sprite" type="Sprite2D" parent="Rail/SpawnPivot/Arm2"]
 texture = ExtResource("3_arm2")
 
-[node name="Plane" type="RigidBody2D" parent="Rail"]
+[node name="Plane" type="Node2D" parent="Rail"]
 position = Vector2(0, 0)
-script = ExtResource("7_platform_body")
-mass = 40.0
-gravity_scale = 0.0
-linear_damp = 3.0
-lock_rotation = true
-rail_y = 270.0
 
 [node name="Sprite" type="Sprite2D" parent="Rail/Plane"]
 texture = ExtResource("4_platform")

@@ -25,10 +25,6 @@ const LANE_COLORS := [
 	Color(0.98, 0.42, 0.42),
 ]
 
-var _gpu = null
-const GpuPendulum := preload("res://gpu_pendulum.gd")
-const MAX_GPU_LANES := 256
-
 var lanes: Array = []
 var next_lane_id := 0
 var best := 0.0
@@ -93,10 +89,6 @@ func _ready() -> void:
 	_hud = _bind_hud()
 	if _hud.has("root") and _hud["root"]:
 		_hud["root"].layer = 20
-
-	_gpu = GpuPendulum.new()
-	if not _gpu.init(MAX_GPU_LANES):
-		print("Balance GPU: compute недоступен — маятник в режиме CPU-fallback (медленный)")
 
 	_create_lane()
 	for i in _spawn_extra:
@@ -219,7 +211,7 @@ func _create_lane_with_id(id: int) -> Dictionary:
 	var lane_scene: PackedScene = load("res://lane.tscn")
 	var lane_node = lane_scene.instantiate()
 	lane_node.lane_id = id
-	lane_node.lane_idx = id if id < MAX_GPU_LANES else 0
+	lane_node.lane_idx = id
 	lane_node.manager = self
 	sv.add_child(lane_node)
 
@@ -262,17 +254,6 @@ func _respawn_lane(id: int) -> bool:
 
 func _physics_process(delta: float) -> void:
 	_physics_tick += 1
-	# шаг GPU-маятника до того, как отработают lane-логики (root выполняется первым)
-	if _gpu != null:
-		for lane in lanes:
-			var p: RigidBody2D = lane["node"].get_node("Rail/Plane")
-			var v: float = p.linear_velocity.x
-			var prev: float = lane.get("prev_vx", 0.0)
-			lane["prev_vx"] = v
-			var acc := clampf((v - prev) / maxf(delta, 1e-6) / 60.0, -30.0, 30.0)
-			var kp_kd: Vector2 = lane["node"].assist_params()
-			_gpu.set_pivot(lane["id"], acc, kp_kd.x, kp_kd.y)
-		_gpu.step(delta)
 	for lane in lanes:
 		var node = lane["node"]
 		if node.score > best:

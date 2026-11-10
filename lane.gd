@@ -1,101 +1,117 @@
 extends Node2D
 
-## Одна игра в составе роя. Физика маятника — на GPU (gpu_pendulum.gd).
-## Менеджер (game.gd) шагает GPU и читает состояния; здесь только платформа и очки.
+## Одна игра в составе роя. Вся физика — аналитическая ODE (1:1 с Rust balance_env).
+## Менеджер шагает ODE и выставляет позиционные узлы; здесь только платформа и очки.
 
-const ACCEL := 900.0
-const RATE := 12.0           ## очков/сек при идеальной вертикали
+const GRAVITY := 9.81
+const M_CART := 40.0
+const CART_DAMP := 3.0
+const CART_ACCEL_RAW := 900.0
+const CART_LIMIT := 360.0
+const DAMPING := 0.10
+const RATE := 12.0
 const PERFECT_VERT := 0.90
 const DANGER_VERT := 0.35
-const ARM_LEVER := 60.0      ## плечо первой секции
-const ARM2_OFFSET := 120.0   ## tip1 → base arm2
+const MULT_GAIN := 0.2
+const MAX_MULT := 4.0
+const ARM_LEVER := 60.0
 
-## Уровни помощи удержанию (пружина к вертикали на GPU).
-const ASSIST_KP := [0.0, 3.0, 15.0, 60.0, 200.0]    ## Н·м/рад (g нормировано как 9.81)
-const ASSIST_KD := [0.0, 1.2, 6.0, 25.0, 80.0]      ## демпфирование, Н·м·с
+const ASSIST_KP := [0.0, 3.0, 15.0, 60.0, 200.0]
+const ASSIST_KD := [0.0, 1.2, 6.0, 25.0, 80.0]
 const ASSIST_NAMES := ["Нет", "Лёгкий", "Средний", "Сильный", "Максимум"]
 
 @export var lane_id := 0
-@export var assist_level := 1   ## 0 — без помощи, 1..4 — уровни облегчения
+@export var assist_level := 1
 
-var manager = null           ## BalanceGame (game.gd)
-var api_direction := 0.0     ## -1 = влево, 0 = стоп, +1 = вправо (от API)
-var lane_idx := 0            ## индекс в GPU-пуле (присваивает менеджер)
+var manager = null
+var api_direction := 0.0
+var lane_idx := 0
 
 var score := 0.0
 var multiplier := 1.0
 var perfect_streak := 0.0
+var total_perfect := 0.0
 var balance_time := 0.0
+var fault_count := 0
+var fault_time := 0.0
 var verticality := 1.0
 var tilt_total := 0.0
 var tilt_rate := 0.0
-var total_perfect := 0.0
-var fault_count := 0
-var fault_time := 0.0
-var _prev_fault := false
+var prev_fault := false
 var _prev_tilt := 0.0
-var _prev_vx := 0.0
-var _accel_x := 0.0
 
-var _plane: RigidBody2D
+# состояние: th1, th2, w1, w2, x, v
+var th1 := 0.0
+var th2 := 0.0
+var w1 := 0.0
+var w2 := 0.0
+var x := 0.0
+var v := 0.0
+
+var _plane: Node2D
 var _arm1: Node2D
 var _arm2: Node2D
+var _pivot: Node2D
 var _sprite: Sprite2D
-var _gpu_state: Vector4 = Vector4(PI, PI, 0.0, 0.0)
 
 func _ready() -> void:
 	_plane = $Rail/Plane
 	_arm1 = $Rail/SpawnPivot/Arm1
 	_arm2 = $Rail/SpawnPivot/Arm2
+	_pivot = $Rail/SpawnPivot
 	_sprite = $Rail/Plane/Sprite
 	$Rail/Plane/Cam.make_current()
-	# исходная поза: стойка с маленьким случайным отклонением
 	var rng := RandomNumberGenerator.new()
-	var t1 := rng.randf_range(-0.10, 0.10)
-	var t2 := rng.randf_range(-0.20, 0.20)
-	var r1 := PI + t1
-	var r2 := PI + t2
-	if manager != null and manager._gpu != null:
-		manager._gpu.init_lane(lane_idx, r1, r2, 0.0, 0.0)
-	_update_arms(Vector4(r1, r2, 0.0, 0.0))
+	_set_state(PI + rng.randf_range(-0.10, 0.10), PI + rng.randf_range(-0.20, 0.20), 0.0, 0.0, 0.0, 0.0)
+
+func _set_state(t1: float, t2: float, v1: float, v2: float, px: float, vx: float) -> void:
+	th1 = t1; th2 = t2; w1 = v1; w2 = v2; x = px; v = vx
+	_update_arms()
 
 func set_assist(level: int) -> void:
 	assist_level = clampi(level, 0, 4)
 
-func set_api_direction(v: float) -> void:
-	api_direction = clampf(v, -1.0, 1.0)
+func set_api_direction(dir: float) -> void:
+	api_direction = clampf(dir, -1.0, 1.0)
 
 func assist_params() -> Vector2:
 	var lvl := clampi(assist_level, 0, 4)
 	return Vector2(ASSIST_KP[lvl], ASSIST_KD[lvl])
 
 func _physics_process(delta: float) -> void:
-	# управление: API важнее клавиатуры; клавиатура — только первая игра
 	var direction := api_direction
 	if direction == 0.0 and lane_id == 0:
 		direction = Input.get_axis("ui_left", "ui_right")
-	_plane.apply_central_force(Vector2(direction * ACCEL * _plane.mass, 0.0))
 
-	# производная скорости платформы → ускорение (для маятника)
-	var vx: float = _plane.linear_velocity.x
-	if delta > 0.0:
-		_accel_x = clampf((vx - _prev_vx) / delta / 60.0, -30.0, 30.0)
-	_prev_vx = vx
+	var force := direction * CART_ACCEL_RAW
+	var cur := [th1, th2, w1, w2, x, v]
+	var k1 := _deriv(cur, force)
+	var s2 := [cur[0] + 0.5 * delta * k1[0], cur[1] + 0.5 * delta * k1[1], cur[2] + 0.5 * delta * k1[2], cur[3] + 0.5 * delta * k1[3], cur[4] + 0.5 * delta * k1[4], cur[5] + 0.5 * delta * k1[5]]
+	var k2 := _deriv(s2, force)
+	var s3 := [cur[0] + 0.5 * delta * k2[0], cur[1] + 0.5 * delta * k2[1], cur[2] + 0.5 * delta * k2[2], cur[3] + 0.5 * delta * k2[3], cur[4] + 0.5 * delta * k2[4], cur[5] + 0.5 * delta * k2[5]]
+	var k3 := _deriv(s3, force)
+	var s4 := [cur[0] + delta * k3[0], cur[1] + delta * k3[1], cur[2] + delta * k3[2], cur[3] + delta * k3[3], cur[4] + delta * k3[4], cur[5] + delta * k3[5]]
+	var k4 := _deriv(s4, force)
+	th1 = cur[0] + delta * (k1[0] + 2.0*k2[0] + 2.0*k3[0] + k4[0]) / 6.0
+	th2 = cur[1] + delta * (k1[1] + 2.0*k2[1] + 2.0*k3[1] + k4[1]) / 6.0
+	w1  = cur[2] + delta * (k1[2] + 2.0*k2[2] + 2.0*k3[2] + k4[2]) / 6.0
+	w2  = cur[3] + delta * (k1[3] + 2.0*k2[3] + 2.0*k3[3] + k4[3]) / 6.0
+	x   = cur[4] + delta * (k1[4] + 2.0*k2[4] + 2.0*k3[4] + k4[4]) / 6.0
+	v   = cur[5] + delta * (k1[5] + 2.0*k2[5] + 2.0*k3[5] + k4[5]) / 6.0
 
-	if manager != null and manager._gpu != null:
-		var kp_kd := assist_params()
-		manager._gpu.set_pivot(lane_idx, _accel_x, kp_kd.x, kp_kd.y)
-		_gpu_state = manager._gpu.lane_state(lane_idx)
-	else:
-		# fallback: маятник не интегрируется — стоит вертикально
-		_gpu_state = Vector4(PI, PI, 0.0, 0.0)
-	_update_arms(_gpu_state)
+	if x > CART_LIMIT:
+		x = CART_LIMIT
+		if v > 0.0: v = 0.0
+	elif x < -CART_LIMIT:
+		x = -CART_LIMIT
+		if v < 0.0: v = 0.0
 
-	var t1 := _gpu_state.x
-	var t2 := _gpu_state.y
-	var h1 := -cos(t1)
-	var h2 := -cos(t2)
-	var up_avg := (h1 + h2) / 2.0
+	_plane.position.x = x
+	_pivot.position.x = x
+
+	_update_arms()
+
+	var up_avg := (-cos(th1) - cos(th2)) * 0.5
 	verticality = clampf(up_avg, 0.0, 1.0)
 	tilt_total = acos(clampf(up_avg, -1.0, 1.0))
 	tilt_rate = lerp(tilt_rate, (tilt_total - _prev_tilt) / maxf(delta, 1e-6), 0.2)
@@ -110,27 +126,53 @@ func _physics_process(delta: float) -> void:
 		total_perfect += delta
 	else:
 		perfect_streak = 0.0
-	multiplier = 1.0 + minf(perfect_streak * 0.2, 4.0)
+	multiplier = 1.0 + minf(perfect_streak * MULT_GAIN, MAX_MULT)
 	score += verticality * verticality * RATE * multiplier * delta
 
 	if fault:
 		fault_time += delta
-		if not _prev_fault:
+		if not prev_fault:
 			fault_count += 1
-	_prev_fault = fault
+	prev_fault = fault
 
 	_sprite.material.set_shader_parameter("stress", clampf(1.0 - clampf(up_avg * 0.5 + 0.5, 0.0, 1.0), 0.0, 1.0))
 
-func _update_arms(state: Vector4) -> void:
-	var t1 := state.x
-	var t2 := state.y
-	var d1 := Vector2(-sin(t1), cos(t1))
-	var d2 := Vector2(-sin(t2), cos(t2))
-	var tip := d1 * (ARM_LEVER + ARM2_OFFSET)
+func _deriv(s: Array, force: float) -> Array:
+	var t1 := float(s[0]); var t2 := float(s[1]); var v1 := float(s[2]); var v2 := float(s[3]); var vx := float(s[5])
+	var d := t1 - t2
+	var cd := cos(d); var sd := sin(d)
+	var s1 := sin(t1); var s2 := sin(t2)
+	var c1 := cos(t1); var c2 := cos(t2)
+
+	var b0 := force + 2.0 * s1 * v1 * v1 + s2 * v2 * v2
+	var b1 := -(sd * v2 * v2 + GRAVITY * 2.0 * s1)
+	var b2 := sd * v1 * v1 - GRAVITY * s2
+
+	var m00 := 42.0; var m01 := 2.0 * c1; var m02 := c2
+	var m10 := 2.0 * c1; var m11 := 2.0;    var m12 := cd
+	var m20 := c2;      var m21 := cd;     var m22 := 1.0
+
+	var det := m00 * (m11 * m22 - m12 * m21) - m01 * (m10 * m22 - m12 * m20) + m02 * (m10 * m21 - m11 * m20)
+	var ac := (b0 * (m11 * m22 - m12 * m21) - m01 * (b1 * m22 - m12 * b2) + m02 * (b1 * m21 - m11 * b2)) / det
+	var a1 := (m00 * (b1 * m22 - m12 * b2) - b0 * (m10 * m22 - m12 * m20) + m02 * (m10 * b2 - b1 * m20)) / det
+	var a2 := (m00 * (m11 * b2 - b1 * m21) - m01 * (m10 * b2 - b1 * m20) + b0 * (m10 * m21 - m11 * m20)) / det
+
+	var lvl := clampi(assist_level, 0, 4)
+	var kp: float = ASSIST_KP[lvl]
+	var kd: float = ASSIST_KD[lvl]
+	a1 = a1 + kp * s1 - kd * v1
+	a2 = a2 + kp * s2 - kd * v2
+
+	return [v1, v2, a1, a2, vx, ac]
+
+func _update_arms() -> void:
+	var d1 := Vector2(-sin(th1), cos(th1))
+	var d2 := Vector2(-sin(th2), cos(th2))
 	_arm1.position = d1 * ARM_LEVER
-	_arm1.rotation = t1
-	_arm2.position = d1 * ARM_LEVER + d1 * ARM2_OFFSET + d2 * ARM_LEVER
-	_arm2.rotation = t2
+	_arm1.rotation = th1
+	var tip := d1 * (2.0 * ARM_LEVER)
+	_arm2.position = tip + d2 * ARM_LEVER
+	_arm2.rotation = th2
 
 func get_state() -> Dictionary:
 	return {
@@ -138,7 +180,7 @@ func get_state() -> Dictionary:
 		"verticality": verticality,
 		"tilt_deg": rad_to_deg(tilt_total),
 		"tilt_rate_deg_s": rad_to_deg(tilt_rate),
-		"lateral_velocity_px_s": _plane.linear_velocity.x,
+		"lateral_velocity_px_s": v,
 		"score": score,
 		"multiplier": multiplier,
 		"perfect_streak_s": perfect_streak,
@@ -146,9 +188,9 @@ func get_state() -> Dictionary:
 		"balance_time_s": balance_time,
 		"faults": fault_count,
 		"fault_time_s": fault_time,
-		"platform_x": _plane.global_position.x,
-		"arm1_deg": rad_to_deg(_gpu_state.x),
-		"arm2_deg": rad_to_deg(_gpu_state.y),
+		"platform_x": x,
+		"arm1_deg": rad_to_deg(th1),
+		"arm2_deg": rad_to_deg(th2),
 		"assist": clampi(assist_level, 0, 4),
 		"assist_name": ASSIST_NAMES[clampi(assist_level, 0, 4)],
 	}
