@@ -1,0 +1,126 @@
+[gd_scene format=3 uid="uid://ba41qsqlpttvk"]
+
+[ext_resource type="Script" path="res://game.gd" id="1_game"]
+[ext_resource type="Shader" path="res://hud_gauge.gdshader" id="2_gauge"]
+[ext_resource type="Texture2D" path="res://axis.svg" id="3_axis"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_gauge"]
+shader = ExtResource("2_gauge")
+verticality = 1.0
+perfect = 0.9
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_panel"]
+bg_color = Color(0.101, 0.103, 0.129, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(1, 1, 1, 0.07)
+corner_radius_top_left = 12
+corner_radius_top_right = 12
+corner_radius_bottom_right = 12
+corner_radius_bottom_left = 12
+content_margin_left = 16.0
+content_margin_top = 14.0
+content_margin_right = 16.0
+content_margin_bottom = 14.0
+
+[node name="root" type="Node2D" unique_id=742997297]
+script = ExtResource("1_game")
+
+[node name="HUD" type="CanvasLayer" parent="."]
+
+[node name="Margin" type="MarginContainer" parent="HUD"]
+offset_left = 20.0
+offset_top = 20.0
+mouse_filter = 2
+
+[node name="Panel" type="Panel" parent="HUD/Margin"]
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_panel")
+
+[node name="VBox" type="VBoxContainer" parent="HUD/Margin/Panel"]
+theme_override_constants/separation = 6
+mouse_filter = 2
+
+[node name="TitleRow" type="HBoxContainer" parent="HUD/Margin/Panel/VBox"]
+theme_override_constants/separation = 8
+mouse_filter = 2
+
+[node name="AxisIcon" type="TextureRect" parent="HUD/Margin/Panel/VBox/TitleRow"]
+custom_minimum_size = Vector2(16, 16)
+expand_mode = 1
+stretch_mode = 5
+texture = ExtResource("3_axis")
+mouse_filter = 2
+
+[node name="TitleLabel" type="Label" parent="HUD/Margin/Panel/VBox/TitleRow"]
+theme_override_colors/font_color = Color(0.925, 0.925, 0.94, 1)
+theme_override_font_sizes/font_size = 15
+text = "Balance"
+vertical_alignment = 1
+mouse_filter = 2
+
+[node name="TitleSpacer" type="Control" parent="HUD/Margin/Panel/VBox/TitleRow"]
+size_flags_horizontal = 3
+mouse_filter = 2
+
+[node name="TelemetryLabel" type="Label" parent="HUD/Margin/Panel/VBox/TitleRow"]
+theme_override_colors/font_color = Color(0.431, 0.435, 0.471, 1)
+theme_override_font_sizes/font_size = 10
+text = "api · :8787"
+vertical_alignment = 1
+mouse_filter = 2
+
+[node name="ScoreLabel" type="Label" parent="HUD/Margin/Panel/VBox"]
+theme_override_colors/font_color = Color(0.663, 0.667, 0.702, 1)
+theme_override_font_sizes/font_size = 11
+text = "Счёт"
+mouse_filter = 2
+
+[node name="ScoreValue" type="Label" parent="HUD/Margin/Panel/VBox"]
+theme_override_colors/font_color = Color(0.925, 0.925, 0.94, 1)
+theme_override_font_sizes/font_size = 38
+text = "0"
+mouse_filter = 2
+
+[node name="Hairline" type="ColorRect" parent="HUD/Margin/Panel/VBox"]
+custom_minimum_size = Vector2(0, 1)
+color = Color(1, 1, 1, 0.07)
+size_flags_horizontal = 3
+mouse_filter = 2
+
+[node name="BestLabel" type="Label" parent="HUD/Margin/Panel/VBox"]
+theme_override_colors/font_color = Color(0.663, 0.667, 0.702, 1)
+theme_override_font_sizes/font_size = 12
+text = "Рекорд  0"
+mouse_filter = 2
+
+[node name="MultLabel" type="Label" parent="HUD/Margin/Panel/VBox"]
+theme_override_colors/font_color = Color(0.910, 0.765, 0.227, 1)
+theme_override_font_sizes/font_size = 13
+text = "Множитель  ×1.0"
+mouse_filter = 2
+
+[node name="TiltLabel" type="Label" parent="HUD/Margin/Panel/VBox"]
+theme_override_colors/font_color = Color(0.663, 0.667, 0.702, 1)
+theme_override_font_sizes/font_size = 11
+text = "Наклон  0°  ·  вертикаль 0%"
+mouse_filter = 2
+
+[node name="AssistLabel" type="Label" parent="HUD/Margin/Panel/VBox"]
+theme_override_colors/font_color = Color(0.910, 0.765, 0.227, 1)
+theme_override_font_sizes/font_size = 11
+text = "Помощь  Лёгкий"
+mouse_filter = 2
+
+[node name="PerfectLabel" type="Label" parent="HUD/Margin/Panel/VBox"]
+theme_override_colors/font_color = Color(0.337, 0.776, 0.514, 1)
+theme_override_font_sizes/font_size = 15
+text = ""
+mouse_filter = 2
+
+[node name="Gauge" type="ColorRect" parent="HUD/Margin/Panel/VBox"]
+custom_minimum_size = Vector2(240, 22)
+material = SubResource("ShaderMaterial_gauge")
+mouse_filter = 2
