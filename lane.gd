@@ -144,7 +144,7 @@ func _deriv(s: Array, force: float) -> Array:
 	var s1 := sin(t1); var s2 := sin(t2)
 	var c1 := cos(t1); var c2 := cos(t2)
 
-	var b0 := force + 2.0 * s1 * v1 * v1 + s2 * v2 * v2
+	var b0 := force - CART_DAMP * vx + 2.0 * s1 * v1 * v1 + s2 * v2 * v2
 	var b1 := -(sd * v2 * v2 + GRAVITY * 2.0 * s1)
 	var b2 := sd * v1 * v1 - GRAVITY * s2
 
@@ -156,6 +156,10 @@ func _deriv(s: Array, force: float) -> Array:
 	var ac := (b0 * (m11 * m22 - m12 * m21) - m01 * (b1 * m22 - m12 * b2) + m02 * (b1 * m21 - m11 * b2)) / det
 	var a1 := (m00 * (b1 * m22 - m12 * b2) - b0 * (m10 * m22 - m12 * m20) + m02 * (m10 * b2 - b1 * m20)) / det
 	var a2 := (m00 * (m11 * b2 - b1 * m21) - m01 * (m10 * b2 - b1 * m20) + b0 * (m10 * m21 - m11 * m20)) / det
+
+	# angular damping on the arms
+	a1 = a1 - DAMPING * v1
+	a2 = a2 - DAMPING * v2
 
 	var lvl := clampi(assist_level, 0, 4)
 	var kp: float = ASSIST_KP[lvl]
