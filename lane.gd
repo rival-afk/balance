@@ -18,8 +18,9 @@ const CART_LIMIT := 2.2
 const DAMPING := 0.10
 ## Масштаб: спрайт плеча 120 px = 1 м.
 const PX_PER_M := 120.0
-## Фиксированный шаг физики — ровно как в Rust/WGSL (не зависит от FPS и time_scale).
-const FIXED_DT := 1.0 / 60.0
+## Фиксированный шаг физики: 4 субшага на кадр 60 Гц, как рекомендует plat.txt
+## (RK4 при 240 Гц даёт дрейф энергии ~2e-6 за 10 с). Не зависит от FPS и time_scale.
+const FIXED_DT := 1.0 / 240.0
 const RATE := 12.0
 const PERFECT_VERT := 0.90
 const DANGER_VERT := 0.35
@@ -176,23 +177,19 @@ func _deriv(s: Array, force: float) -> Array:
 	var m22 := M2 * L2 * L2
 
 	var b0 := force - CART_DAMP * vx + (M1 + M2) * L1 * s1 * v1 * v1 + M2 * L2 * s2 * v2 * v2
-	var b1 := -(M2 * L1 * L2 * sd * v2 * v2 + (M1 + M2) * GRAVITY * L1 * s1)
-	var b2 := M2 * L1 * L2 * sd * v1 * v1 - M2 * GRAVITY * L2 * s2
+
+	# plat.txt, раздел 3: трение в шарнирах и момент ассиста стоят в правой части
+	# (r2, r3), а не добавляются к ускорениям после решения системы.
+	var lvl := clampi(assist_level, 0, 4)
+	var kp: float = ASSIST_KP[lvl]
+	var kd: float = ASSIST_KD[lvl]
+	var b1 := -DAMPING * v1 - M2 * L1 * L2 * sd * v2 * v2 - (M1 + M2) * GRAVITY * L1 * s1 + kp * s1 - kd * v1
+	var b2 := -DAMPING * v2 + M2 * L1 * L2 * sd * v1 * v1 - M2 * GRAVITY * L2 * s2 + kp * s2 - kd * v2
 
 	var det := m00 * (m11 * m22 - m12 * m21) - m01 * (m10 * m22 - m12 * m20) + m02 * (m10 * m21 - m11 * m20)
 	var ac := (b0 * (m11 * m22 - m12 * m21) - m01 * (b1 * m22 - m12 * b2) + m02 * (b1 * m21 - m11 * b2)) / det
 	var a1 := (m00 * (b1 * m22 - m12 * b2) - b0 * (m10 * m22 - m12 * m20) + m02 * (m10 * b2 - b1 * m20)) / det
 	var a2 := (m00 * (m11 * b2 - b1 * m21) - m01 * (m10 * b2 - b1 * m20) + b0 * (m10 * m21 - m11 * m20)) / det
-
-	# angular damping on the arms
-	a1 = a1 - DAMPING * v1
-	a2 = a2 - DAMPING * v2
-
-	var lvl := clampi(assist_level, 0, 4)
-	var kp: float = ASSIST_KP[lvl]
-	var kd: float = ASSIST_KD[lvl]
-	a1 = a1 + kp * s1 - kd * v1
-	a2 = a2 + kp * s2 - kd * v2
 
 	return [v1, v2, a1, a2, vx, ac]
 
