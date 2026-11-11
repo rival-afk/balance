@@ -24,8 +24,10 @@ stress = 0.0
 script = ExtResource("1_lane")
 
 [node name="Felt" type="ColorRect" parent="."]
-offset_right = 960.0
-offset_bottom = 540.0
+offset_left = -480.0
+offset_top = -270.0
+offset_right = 1440.0
+offset_bottom = 810.0
 material = SubResource("ShaderMaterial_felt")
 mouse_filter = 2
 
@@ -44,50 +46,51 @@ mouse_filter = 2
 position = Vector2(-360, 0)
 
 [node name="Body" type="ColorRect" parent="Rail/WallLeft"]
-offset_left = -380.0
+offset_left = -28.0
 offset_top = -200.0
-offset_right = -352.0
+offset_right = 0.0
 offset_bottom = 200.0
 color = Color(0.133, 0.133, 0.157, 1)
 mouse_filter = 2
 
 [node name="Cap" type="ColorRect" parent="Rail/WallLeft"]
-offset_left = -380.0
+offset_left = -28.0
 offset_top = -200.0
-offset_right = -352.0
+offset_right = 0.0
 offset_bottom = -192.0
 color = Color(0.910, 0.765, 0.227, 1)
 mouse_filter = 2
 
 [node name="Collision" type="CollisionShape2D" parent="Rail/WallLeft"]
-position = Vector2(-366, 0)
+position = Vector2(-374, 0)
 shape = SubResource("RectangleShape2D_wall")
 
 [node name="WallRight" type="StaticBody2D" parent="Rail"]
 position = Vector2(360, 0)
 
 [node name="Body" type="ColorRect" parent="Rail/WallRight"]
-offset_left = 360.0
+offset_left = 0.0
 offset_top = -200.0
-offset_right = 388.0
+offset_right = 28.0
 offset_bottom = 200.0
 color = Color(0.133, 0.133, 0.157, 1)
 mouse_filter = 2
 
 [node name="Cap" type="ColorRect" parent="Rail/WallRight"]
-offset_left = 360.0
+offset_left = 0.0
 offset_top = -200.0
-offset_right = 388.0
+offset_right = 28.0
 offset_bottom = -192.0
 color = Color(0.910, 0.765, 0.227, 1)
 mouse_filter = 2
 
 [node name="Collision" type="CollisionShape2D" parent="Rail/WallRight"]
-position = Vector2(375, 0)
+position = Vector2(374, 0)
 shape = SubResource("RectangleShape2D_wall")
 
 [node name="SpawnPivot" type="Node2D" parent="Rail"]
-position = Vector2(0, -28)
+position = Vector2(0, -17)
+z_index = 1
 
 [node name="Arm1" type="Node2D" parent="Rail/SpawnPivot"]
 position = Vector2(0, -60)
@@ -103,6 +106,7 @@ texture = ExtResource("3_arm2")
 
 [node name="Plane" type="Node2D" parent="Rail"]
 position = Vector2(0, 0)
+scale = Vector2(0.6, 0.6)
 
 [node name="Sprite" type="Sprite2D" parent="Rail/Plane"]
 texture = ExtResource("4_platform")
@@ -111,6 +115,5 @@ material = SubResource("ShaderMaterial_stress")
 [node name="Collision" type="CollisionShape2D" parent="Rail/Plane"]
 shape = SubResource("RectangleShape2D_platform")
 
-[node name="Cam" type="Camera2D" parent="Rail/Plane"]
-position_smoothing_enabled = true
-zoom = Vector2(0.66, 0.66)
+[node name="Cam" type="Camera2D" parent="Rail"]
+zoom = Vector2(0.8, 0.8)
