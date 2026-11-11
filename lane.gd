@@ -21,7 +21,7 @@ const ASSIST_KD := [0.0, 1.2, 6.0, 25.0, 80.0]
 const ASSIST_NAMES := ["Нет", "Лёгкий", "Средний", "Сильный", "Максимум"]
 
 @export var lane_id := 0
-@export var assist_level := 1
+@export var assist_level := 0
 
 var manager = null
 var api_direction := 0.0
